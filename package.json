@@ -1,0 +1,52 @@
+{
+  "name": "quematokens",
+  "displayName": "QuemaTokens",
+  "description": "Tragaperras clásica de palanca. Cada vez que usas Copilot/Chat, ¡se giran los carretes! Quema tokens con cabeza.",
+  "version": "1.0.0",
+  "publisher": "quematokens",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "other",
+    "fun"
+  ],
+  "activationEvents": [
+    "onCommand:quematokens.open",
+    "onCommand:quematokens.spin",
+    "onCommand:quematokens.reset"
+  ],
+  "main": "./out/extension.js",
+  "icon": "icons/icon128.png",
+  "contributes": {
+    "commands": [
+      {
+        "command": "quematokens.open",
+        "title": "QuemaTokens: Abrir máquina",
+        "category": "QuemaTokens"
+      },
+      {
+        "command": "quematokens.spin",
+        "title": "QuemaTokens: Tirar",
+        "category": "QuemaTokens"
+      },
+      {
+        "command": "quematokens.reset",
+        "title": "QuemaTokens: Reiniciar créditos",
+        "category": "QuemaTokens"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "npx @vscode/vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.11.0",
+    "esbuild": "^0.20.0",
+    "@vscode/vsce": "^3.2.0"
+  }
+}
