@@ -106,6 +106,34 @@ export function getWebviewHtml(extensionUri: vscode.Uri, webview: vscode.Webview
       <div class="tabla-filas" id="tabla-filas"></div>
       <p class="tabla-nota">A mayor apuesta, mayor premio. Quema con cabeza.</p>
     </div>
+
+    <!-- Provider Usage Panel -->
+    <div class="providers-panel" id="providers-panel">
+      <div class="providers-header" id="providers-toggle">
+        <span>📊 Live Token Tracking</span>
+        <span class="providers-arrow" id="providers-arrow">▼</span>
+      </div>
+      <div class="providers-body" id="providers-body">
+        <div class="providers-summary">
+          <div class="providers-stat">
+            <span class="providers-stat-label">Today</span>
+            <span class="providers-stat-value" id="stat-today-total">0</span>
+          </div>
+          <div class="providers-stat">
+            <span class="providers-stat-label">All Time</span>
+            <span class="providers-stat-value" id="stat-alltime-total">0</span>
+          </div>
+          <div class="providers-stat">
+            <span class="providers-stat-label">In / Out</span>
+            <span class="providers-stat-value" id="stat-today-inout">0 / 0</span>
+          </div>
+        </div>
+        <div class="providers-list" id="providers-list"></div>
+        <div class="providers-footer">
+          <span id="providers-source">Watching Copilot sessions…</span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>${getScript(imgMapJson)}</script>
@@ -523,6 +551,144 @@ body {
 }
 
 .oculto { display: none; }
+
+/* ── Provider Usage Panel ── */
+.providers-panel {
+  margin-top: 10px;
+  background: #111;
+  border: 2px solid var(--dorado);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.providers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--purple);
+  color: var(--dorado-claro);
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.providers-arrow {
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.providers-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+.providers-body {
+  padding: 8px 10px;
+  transition: max-height 0.3s ease;
+}
+
+.providers-body.collapsed {
+  display: none;
+}
+
+.providers-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.providers-stat {
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.providers-stat-label {
+  display: block;
+  color: var(--dorado);
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+.providers-stat-value {
+  display: block;
+  color: #ffd9d9;
+  font-family: "Courier New", monospace;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.providers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.provider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+}
+
+.provider-row:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.provider-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.provider-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.provider-name {
+  flex: 1;
+  color: #ccc;
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provider-tokens {
+  color: var(--dorado-claro);
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  font-weight: bold;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.provider-tokens .out { color: #7CFC8a; }
+.provider-tokens .in { color: #888; font-size: 10px; }
+
+.providers-footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  color: #666;
+  font-size: 10px;
+  text-align: center;
+  font-style: italic;
+}
 `;
 }
 
@@ -544,6 +710,21 @@ const FRECUENCIA = {
 };
 
 const IMG = ${imgMapJson};
+
+// Provider color map (keyed by provider ID for webview use)
+const PROVIDER_COLORS = {
+  openai: '#10a37f', anthropic: '#d4a574', google: '#4285f4',
+  xai: '#ffffff', deepseek: '#4d6bfe', qwen: '#6f42c1',
+  zhipu: '#00bfa5', minimax: '#e74c3c', nvidia: '#76b900',
+  mistral: '#ff7000', unknown: '#888888'
+};
+
+const PROVIDER_ICONS = {
+  openai: 'codex', anthropic: 'claude', google: 'gemini',
+  xai: 'xai', deepseek: 'deepseek', qwen: 'qwen',
+  zhipu: 'zai', minimax: 'minimax', nvidia: 'nvidia',
+  mistral: 'mistral', unknown: 'codex'
+};
 
 function construirTira(orden) {
   const tira = [];
@@ -919,6 +1100,61 @@ $('cerrar-tabla').addEventListener('click', () => {
   tablaPagos.classList.add('oculto');
 });
 
+// ── Provider Panel Toggle ──
+$('providers-toggle').addEventListener('click', () => {
+  const body = $('providers-body');
+  const arrow = $('providers-arrow');
+  body.classList.toggle('collapsed');
+  arrow.classList.toggle('collapsed');
+});
+
+// ── Provider Panel Rendering ──
+function formatNumber(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function renderProviderPanel(todayUsage, allTimeTotal) {
+  const todayTotal = (todayUsage.totalInput || 0) + (todayUsage.totalOutput || 0);
+  const allTimeTotalVal = (allTimeTotal.inputTokens || 0) + (allTimeTotal.outputTokens || 0);
+
+  $('stat-today-total').textContent = formatNumber(todayTotal);
+  $('stat-alltime-total').textContent = formatNumber(allTimeTotalVal);
+  $('stat-today-inout').textContent = formatNumber(todayUsage.totalInput || 0) + ' / ' + formatNumber(todayUsage.totalOutput || 0);
+
+  const providers = todayUsage.providers || {};
+  const list = $('providers-list');
+
+  // Sort by output tokens descending
+  const sorted = Object.entries(providers).sort((a, b) => (b[1].totalOutput || 0) - (a[1].totalOutput || 0));
+
+  if (sorted.length === 0) {
+    list.innerHTML = '<div style="color:#666;font-size:11px;text-align:center;padding:8px;">No token activity detected yet. Use Copilot Chat or @quematokens to see stats here.</div>';
+    return;
+  }
+
+  list.innerHTML = sorted.map(([id, usage]) => {
+    const color = PROVIDER_COLORS[id] || '#888';
+    const iconKey = PROVIDER_ICONS[id] || 'codex';
+    const iconUrl = IMG[iconKey] || '';
+    const outTotal = usage.totalOutput || 0;
+    const inTotal = usage.totalInput || 0;
+    const total = outTotal + inTotal;
+    if (total === 0) return '';
+
+    return '<div class="provider-row">' +
+      '<div class="provider-dot" style="background:' + color + ';box-shadow:0 0 4px ' + color + '"></div>' +
+      (iconUrl ? '<img class="provider-icon" src="' + iconUrl + '" alt="' + id + '">' : '') +
+      '<span class="provider-name">' + (usage.providerName || id) + '</span>' +
+      '<span class="provider-tokens">' +
+        '<span class="out">' + formatNumber(outTotal) + '</span>' +
+        (inTotal > 0 ? ' <span class="in">(' + formatNumber(inTotal) + ')</span>' : '') +
+      '</span>' +
+    '</div>';
+  }).filter(Boolean).join('');
+}
+
 // ── VSCode Message handling ──
 const vscode = typeof acquireVsCodeApi !== 'undefined' ? acquireVsCodeApi() : null;
 
@@ -952,6 +1188,9 @@ window.addEventListener('message', (event) => {
       pintarMarcadores();
       montarCarretes();
       mensaje.textContent = 'Tokens reiniciados';
+      break;
+    case 'updateTokenStats':
+      renderProviderPanel(msg.todayUsage || {}, msg.allTimeTotal || {});
       break;
   }
 });

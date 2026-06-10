@@ -2,7 +2,7 @@
   "name": "quematokens",
   "displayName": "QuemaTokens",
   "description": "Tragaperras clásica de palanca. Cada vez que usas Copilot/Chat, ¡se giran los carretes! Quema tokens con cabeza.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "quematokens",
   "engines": {
     "vscode": "^1.85.0"
@@ -14,11 +14,48 @@
   "activationEvents": [
     "onCommand:quematokens.open",
     "onCommand:quematokens.spin",
-    "onCommand:quematokens.reset"
+    "onCommand:quematokens.reset",
+    "onCommand:quematokens.stats",
+    "onCommand:quematokens.exportUsage"
   ],
   "main": "./out/extension.js",
   "icon": "icons/icon128.png",
   "contributes": {
+    "configuration": {
+      "title": "QuemaTokens",
+      "properties": {
+        "quematokens.autoSpin": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-spin slot machine when AI chat activity is detected"
+        },
+        "quematokens.trackCopilot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Watch Copilot session files for real token counts"
+        },
+        "quematokens.copilotSessionPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to Copilot session-state directory (auto-detected if empty)"
+        },
+        "quematokens.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API key for local tiktoken counting (optional, BYOK users)"
+        },
+        "quematokens.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API key for token counting (optional, BYOK users)"
+        },
+        "quematokens.geminiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Google Gemini API key for token counting (optional, BYOK users)"
+        }
+      }
+    },
     "commands": [
       {
         "command": "quematokens.open",
@@ -34,6 +71,39 @@
         "command": "quematokens.reset",
         "title": "QuemaTokens: Reiniciar créditos",
         "category": "QuemaTokens"
+      },
+      {
+        "command": "quematokens.stats",
+        "title": "QuemaTokens: Show token usage stats",
+        "category": "QuemaTokens"
+      },
+      {
+        "command": "quematokens.exportUsage",
+        "title": "QuemaTokens: Export token usage data",
+        "category": "QuemaTokens"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "quematokens",
+        "name": "QuemaTokens",
+        "fullName": "QuemaTokens Token Tracker",
+        "description": "Shows current AI token usage statistics from QuemaTokens tracker",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "stats",
+            "description": "Show today's and all-time token usage stats"
+          },
+          {
+            "name": "reset",
+            "description": "Reset all token usage statistics"
+          },
+          {
+            "name": "export",
+            "description": "Export usage data as JSON"
+          }
+        ]
       }
     ]
   },
@@ -42,6 +112,9 @@
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "package": "npx @vscode/vsce package --allow-missing-repository"
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.12"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
