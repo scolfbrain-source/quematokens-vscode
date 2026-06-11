@@ -184,7 +184,7 @@ const bet=()=>APUESTAS[betIdx];
 
 function mountReels(){tiras.forEach((t,i)=>{const c=[];for(let r=0;r<REP;r++)for(const s of REELS[i])c.push('<div class="celda"><img src="'+IMG[s]+'" alt="'+s+'"></div>');t.innerHTML=c.join('');place(t,idx[i])})}
 function place(t,i){t.style.transition='none';t.style.transform='translateY('+(-i*H)+'px)'}
-function spinReel(n,dest,dur){return new Promise(r=>{const t=tiras[n],len=REELS[n].length,cur=idx[n],adv=TURNS[n]*len+((dest-cur+len)%len),fin=cur+adv;t.getBoundingClientRect();t.style.transition='transform '+dur+'ms cubic-bezier(.15,.6,.25,1)';t.style.transform='translateY('+(-fin*H)+'px)';t.addEventListener('transitionend',()=>{idx[n]=dest;place(t,dest);sStop();r()},{once:true})})}
+function spinReel(n,dest,dur){return new Promise(r=>{const t=tiras[n],len=REELS[n].length,cur=idx[n],adv=TURNS[n]*len+((dest-cur+len)%len),fin=cur+adv;let done=false;const finish=()=>{if(done)return;done=true;idx[n]=dest;place(t,dest);sStop();r()};t.getBoundingClientRect();t.style.transition='transform '+dur+'ms cubic-bezier(.15,.6,.25,1)';t.style.transform='translateY('+(-fin*H)+'px)';t.addEventListener('transitionend',finish,{once:true});setTimeout(finish,dur+500)})}
 
 function paint(){
   $('creditos').textContent=credits.toLocaleString();
@@ -201,7 +201,6 @@ function paint(){
 }
 
 function save(){
-  const vscode=typeof acquireVsCodeApi!=='undefined'?acquireVsCodeApi():null;
   if(!vscode)return;
   vscode.postMessage({command:'saveState',credits,record,betIndex:betIdx,totalSpins,totalTokensSpent:totalBet,jackpot,
     gameStats:{wins,losses,biggestWin:bigWin,jackpotsWon,streak,bestStreak,totalBet,totalWon}});

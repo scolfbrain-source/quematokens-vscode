@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Machine body - dark red -->
+  <rect x="1" y="2" width="14" height="12" rx="2" fill="#8b1a1a"/>
+  <!-- Gold border -->
+  <rect x="1" y="2" width="14" height="12" rx="2" fill="none" stroke="#d4a030" stroke-width="1"/>
+  <!-- Reel window -->
+  <rect x="2.5" y="4" width="9" height="5" rx="1" fill="#1a1a1a"/>
+  <!-- Three reel circles -->
+  <circle cx="4.5" cy="6.5" r="1.2" fill="#e74c3c"/>
+  <circle cx="7" cy="6.5" r="1.2" fill="#3498db"/>
+  <circle cx="9.5" cy="6.5" r="1.2" fill="#2ecc71"/>
+  <!-- Pay line -->
+  <line x1="2.5" y1="6.5" x2="11.5" y2="6.5" stroke="#d4a030" stroke-width="0.4" opacity="0.6"/>
+  <!-- Lever -->
+  <rect x="12" y="3" width="1.5" height="8" rx="0.75" fill="#c0c0c0"/>
+  <circle cx="12.75" cy="3.5" r="1.2" fill="#cc3333"/>
+  <!-- Base -->
+  <rect x="3" y="11.5" width="7" height="1" rx="0.5" fill="#d4a030"/>
+</svg>

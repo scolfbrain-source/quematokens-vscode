@@ -2,7 +2,7 @@
   "name": "quematokens",
   "displayName": "QuemaTokens",
   "description": "Tragaperras clásica de palanca. ¡Juega y quema tokens! Los tokens de tu IA alimentan el bote progresivo.",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "publisher": "quematokens",
   "engines": {
     "vscode": "^1.85.0"
@@ -13,8 +13,7 @@
   ],
   "activationEvents": [
     "onCommand:quematokens.open",
-    "onCommand:quematokens.spin",
-    "onCommand:quematokens.reset"
+    "onView:quematokens-main"
   ],
   "main": "./out/extension.js",
   "icon": "icons/icon128.png",
@@ -23,7 +22,8 @@
       {
         "command": "quematokens.open",
         "title": "QuemaTokens: Abrir máquina",
-        "category": "QuemaTokens"
+        "category": "QuemaTokens",
+        "icon": "$(rocket)"
       },
       {
         "command": "quematokens.spin",
@@ -46,6 +46,24 @@
         "category": "QuemaTokens"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "quematokens-container",
+          "title": "QuemaTokens",
+          "icon": "icons/icon16.svg"
+        }
+      ]
+    },
+    "views": {
+      "quematokens-container": [
+        {
+          "id": "quematokens-main",
+          "name": "QuemaTokens",
+          "type": "webview"
+        }
+      ]
+    },
     "configuration": {
       "title": "QuemaTokens",
       "properties": {
@@ -67,7 +85,7 @@
         "quematokens.openaiApiKey": {
           "type": "string",
           "default": "",
-          "description": "API key OpenAI (opcional, para token counting directo)"
+          "description": "API key OpenAI (opcional)"
         },
         "quematokens.anthropicApiKey": {
           "type": "string",
