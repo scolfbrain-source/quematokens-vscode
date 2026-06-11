@@ -173,6 +173,10 @@ export class TokenTracker {
 
   private guessProviderFromUri(uri: string): ProviderDef {
     const lower = uri.toLowerCase();
+    // Copilot chat (covers copilot, vscode-chat, inline-chat, and opencode proxy)
+    if (lower.includes('copilot') || lower.includes('vscode-chat') || lower.includes('inline-chat') || lower.includes('chat-participants') || lower.includes('chat-view')) {
+      return PROVIDERS.find(p => p.id === 'copilot')!;
+    }
     if (lower.includes('claude') || lower.includes('anthropic')) {
       return PROVIDERS.find(p => p.id === 'anthropic')!;
     }
@@ -200,8 +204,8 @@ export class TokenTracker {
     if (lower.includes('nvidia') || lower.includes('nemotron')) {
       return PROVIDERS.find(p => p.id === 'nvidia')!;
     }
-    // Default to OpenAI (Copilot default)
-    return PROVIDERS.find(p => p.id === 'openai')!;
+    // Default: if scheme is not file/git, likely a chat extension → Copilot
+    return PROVIDERS.find(p => p.id === 'copilot')!;
   }
 
   private guessProviderFromContent(text: string): ProviderDef {
@@ -237,8 +241,10 @@ export class TokenTracker {
     // Fallback: guess from provider context in URI
     if (uri.includes('claude')) return 'claude';
     if (uri.includes('gemini')) return 'gemini';
-    if (uri.includes('gpt') || uri.includes('codex') || uri.includes('copilot')) return 'gpt-4o';
-    return 'estimated';
+    if (uri.includes('gpt')) return 'gpt-4o';
+    if (uri.includes('codex')) return 'codex';
+    if (uri.includes('copilot')) return 'copilot-model';
+    return 'copilot-model';
   }
 
   // ── State Persistence ──

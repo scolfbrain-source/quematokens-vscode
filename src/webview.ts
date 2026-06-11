@@ -73,9 +73,11 @@ body{width:100%;max-width:500px;margin:0 auto;background:#1a1423;font-family:Geo
 .bola{position:absolute;top:-18px;left:-8px;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e96a6a,var(--rojo) 60%,var(--rojo-o));box-shadow:0 3px 6px var(--sombra)}
 .base-palanca{position:absolute;bottom:0;left:50%;width:34px;height:30px;margin-left:-17px;background:linear-gradient(180deg,#c9a23a,#8a6c20);border-radius:8px 8px 4px 4px;box-shadow:0 3px 5px var(--sombra)}
 .panel-inferior{display:flex;align-items:stretch;gap:8px;margin-top:10px}
-.display{background:#111;border:2px solid var(--dorado);border-radius:8px;padding:5px 10px;text-align:center;min-width:86px}
+.display{background:#111;border:2px solid var(--dorado);border-radius:8px;padding:5px 8px;text-align:center;min-width:86px;flex-shrink:0}
 .display .etiqueta{display:block;color:var(--dorado);font-size:9px;letter-spacing:2px}
-.display .valor{display:block;color:#ffd9d9;font-family:"Courier New",monospace;font-size:22px;font-weight:bold}
+.display .valor{display:block;color:#ffd9d9;font-family:"Courier New",monospace;font-size:22px;font-weight:bold;white-space:nowrap;overflow:visible}
+.display .valor.small{font-size:16px}
+.display .valor.smaller{font-size:13px}
 .display.premio .valor{color:#7CFC8a}
 .mensaje{flex:1;display:flex;align-items:center;justify-content:center;color:var(--dorado-c);font-size:14px;font-style:italic;text-align:center}
 .mensaje.gano{color:#ffe98a;font-style:normal;font-weight:bold;animation:parpadeo .4s steps(2) 6}
@@ -182,8 +184,19 @@ function place(t,i){t.style.transition='none';t.style.transform='translateY('+(-
 function spinReel(n,dest,dur){return new Promise(r=>{const t=tiras[n],len=REELS[n].length,cur=idx[n],adv=TURNS[n]*len+((dest-cur+len)%len),fin=cur+adv;let done=false;const finish=()=>{if(done)return;done=true;idx[n]=dest;place(t,dest);sStop();r()};t.getBoundingClientRect();t.style.transition='transform '+dur+'ms cubic-bezier(.15,.6,.25,1)';t.style.transform='translateY('+(-fin*H)+'px)';t.addEventListener('transitionend',finish,{once:true});setTimeout(finish,dur+500)})}
 
 function paint(){
-  $('creditos').textContent=credits.toLocaleString();
-  $('record').textContent=rec.toLocaleString();
+  const fmt=v=>{
+    const el=$('creditos');
+    el.classList.remove('small','smaller');
+    if(v>=100000)el.classList.add('smaller');
+    else if(v>=10000)el.classList.add('small');
+    return v.toLocaleString();
+  };
+  $('creditos').textContent=fmt(credits);
+  const recEl=$('record');
+  recEl.classList.remove('small','smaller');
+  if(rec>=100000)recEl.classList.add('smaller');
+  else if(rec>=10000)recEl.classList.add('small');
+  recEl.textContent=rec.toLocaleString();
   $('apuesta').textContent=bet();
   $('jackpot-amount').textContent=jackpot.toLocaleString();
   const jd=$('jackpot-display');
@@ -260,7 +273,7 @@ async function tirar(){
   }
   if(prize>0){credits+=prize;totalWon+=prize;wins++;streak++;if(streak>bestStreak)bestStreak=streak}else{losses++;streak=0}
   paint();
-  try{save()}catch(se){$('mensaje').textContent='(saved) '+$('mensaje').textContent}
+  save();
   } catch(e) {
     const em=e&&e.message?e.message:String(e);
     const es=e&&e.stack?e.stack.split('\\n').slice(0,2).join(' '):'';

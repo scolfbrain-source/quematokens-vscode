@@ -15,6 +15,14 @@ export interface ProviderDef {
 
 export const PROVIDERS: ProviderDef[] = [
   {
+    id: 'copilot',
+    name: 'Copilot',
+    color: '#6e40c9',
+    icon: 'codex.png',
+    tokenCountMethod: 'local',
+    modelPatterns: [/copilot/i, /codex/i],
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     color: '#10a37f',
