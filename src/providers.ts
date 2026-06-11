@@ -105,6 +105,23 @@ export const PROVIDERS: ProviderDef[] = [
     tokenCountMethod: 'tiktoken',
     modelPatterns: [/mistral/i, /mixtral/i, /codestral/i],
   },
+  {
+    id: 'claude-code',
+    name: 'Claude Code',
+    color: '#d4a574',
+    icon: 'claude.png',
+    tokenCountMethod: 'anthropic',
+    modelPatterns: [/claude/i],
+    settingKey: 'anthropicApiKey',
+  },
+  {
+    id: 'codex-cli',
+    name: 'Codex CLI',
+    color: '#10a37f',
+    icon: 'codex.png',
+    tokenCountMethod: 'tiktoken',
+    modelPatterns: [/gpt-5-codex/i, /o3/i, /o4-mini/i, /codex/i],
+  },
 ];
 
 // ── Provider Lookup ──

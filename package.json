@@ -2,7 +2,7 @@
   "name": "quematokens",
   "displayName": "QuemaTokens",
   "description": "Tragaperras clásica de palanca. ¡Juega y quema tokens! Los tokens de tu IA alimentan el bote progresivo.",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "publisher": "quematokens",
   "engines": {
     "vscode": "^1.85.0"
@@ -96,6 +96,16 @@
           "type": "string",
           "default": "",
           "description": "API key Gemini (opcional)"
+        },
+        "quematokens.trackClaudeCode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Trackear tokens de Claude Code CLI via ~/.claude/projects/"
+        },
+        "quematokens.trackCodex": {
+          "type": "boolean",
+          "default": true,
+          "description": "Trackear tokens de Codex CLI via ~/.codex/sessions/"
         }
       }
     },

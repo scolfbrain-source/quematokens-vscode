@@ -70,12 +70,41 @@ export class SessionWatcher {
 
   async start(): Promise<void> {
     const config = vscode.workspace.getConfiguration('quematokens');
+
+    // Start all watchers in parallel — don't block one on another
+    const promises: Promise<void>[] = [];
+
+    // Copilot watcher
     const trackCopilot = config.get<boolean>('trackCopilot', true);
-    if (!trackCopilot) {
+    if (trackCopilot) {
+      promises.push(this.startCopilotWatcher());
+    } else {
       this._outputChannel.appendLine('[QuemaTokens] Copilot session tracking disabled');
-      return;
     }
 
+    // Claude Code watcher
+    const trackClaudeCode = config.get<boolean>('trackClaudeCode', true);
+    if (trackClaudeCode) {
+      promises.push(this.watchClaudeCodeSessions());
+    } else {
+      this._outputChannel.appendLine('[QuemaTokens] Claude Code tracking disabled');
+    }
+
+    // Codex CLI watcher
+    const trackCodex = config.get<boolean>('trackCodex', true);
+    if (trackCodex) {
+      promises.push(this.watchCodexSessions());
+    } else {
+      this._outputChannel.appendLine('[QuemaTokens] Codex CLI tracking disabled');
+    }
+
+    await Promise.allSettled(promises);
+  }
+
+  // ── Copilot Session Watcher ──
+
+  private async startCopilotWatcher(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('quematokens');
     const customPath = config.get<string>('copilotSessionPath', '');
     const homeDir = os.homedir();
 
@@ -321,6 +350,426 @@ export class SessionWatcher {
       tokenCountMethod: 'local',
       modelPatterns: [],
     };
+  }
+
+  // ── Claude Code Session Watcher ──
+
+  private async watchClaudeCodeSessions(): Promise<void> {
+    const homeDir = os.homedir();
+    const claudeProjectsDir = path.join(homeDir, '.claude', 'projects');
+
+    // 1. Watch the stats-cache.json for aggregated totals
+    this.watchClaudeStatsCache(path.join(homeDir, '.claude', 'stats-cache.json'));
+
+    // 2. Watch the projects directory for session JSONL files
+    try {
+      const exists = await fs.promises.access(claudeProjectsDir).then(() => true).catch(() => false);
+      if (!exists) {
+        this._outputChannel.appendLine(`[QuemaTokens] Claude Code projects dir not found: ${claudeProjectsDir}`);
+        return;
+      }
+
+      this._outputChannel.appendLine(`[QuemaTokens] Watching Claude Code sessions at: ${claudeProjectsDir}`);
+      await this.scanClaudeCodeSessions(claudeProjectsDir);
+      this.watchClaudeCodeDir(claudeProjectsDir);
+    } catch (e) {
+      this._outputChannel.appendLine(`[QuemaTokens] Claude Code watcher error: ${e}`);
+    }
+  }
+
+  private watchClaudeStatsCache(statsFile: string): void {
+    try {
+      // Read initial state
+      this.readClaudeStatsCache(statsFile);
+
+      // Watch for changes
+      const watcher = fs.watch(statsFile, { persistent: false }, () => {
+        this.readClaudeStatsCache(statsFile);
+      });
+      watcher.on('error', () => { /* ignore */ });
+      this.watchers.set(`claude-stats-${statsFile}`, watcher);
+      this._outputChannel.appendLine(`[QuemaTokens] Watching Claude Code stats cache: ${statsFile}`);
+    } catch {
+      // file may not exist yet — that's fine
+    }
+  }
+
+  private claudeStatsLastEntryIndex: number = 0;
+
+  private readClaudeStatsCache(statsFile: string): void {
+    try {
+      const content = fs.readFileSync(statsFile, 'utf-8');
+      const data = JSON.parse(content);
+      const entries: any[] = data.entries || [];
+
+      // Process only new entries
+      for (let i = this.claudeStatsLastEntryIndex; i < entries.length; i++) {
+        const entry = entries[i];
+        const model = entry.model || 'claude';
+        const inputTokens = entry.input_tokens || 0;
+        const outputTokens = entry.output_tokens || 0;
+
+        if (inputTokens > 0 || outputTokens > 0) {
+          const provider = this.findProviderById('claude-code') || identifyProvider(model) || this.fallbackProvider(model);
+          this.emit({
+            requestId: `claude-stats-${i}-${entry.timestamp || Date.now()}`,
+            provider,
+            model,
+            inputTokens,
+            outputTokens,
+            timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+            source: 'session',
+          });
+        }
+      }
+
+      this.claudeStatsLastEntryIndex = entries.length;
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  private async scanClaudeCodeSessions(baseDir: string): Promise<void> {
+    try {
+      await this.scanClaudeCodeDirRecursive(baseDir);
+    } catch (e) {
+      this._outputChannel.appendLine(`[QuemaTokens] Error scanning Claude Code sessions: ${e}`);
+    }
+  }
+
+  private async scanClaudeCodeDirRecursive(dir: string): Promise<void> {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await this.scanClaudeCodeDirRecursive(fullPath);
+      } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+        try {
+          const stat = await fs.promises.stat(fullPath);
+          const key = `claude-${fullPath}`;
+          if (!this.tailPositions.has(key)) {
+            this.tailPositions.set(key, stat.size); // start from end for existing files
+            this.tailClaudeCodeFile(fullPath, key);
+          }
+        } catch {
+          // skip
+        }
+      }
+    }
+  }
+
+  private watchClaudeCodeDir(baseDir: string): void {
+    try {
+      const watcher = fs.watch(baseDir, { persistent: false, recursive: true }, async (eventType, filename) => {
+        if (!filename) return;
+        try {
+          const fullPath = path.join(baseDir, filename);
+          const stat = await fs.promises.stat(fullPath);
+          if (stat.isFile() && filename.endsWith('.jsonl')) {
+            const key = `claude-${fullPath}`;
+            if (!this.tailPositions.has(key)) {
+              this.tailPositions.set(key, 0);
+              this.tailClaudeCodeFile(fullPath, key);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      });
+      watcher.on('error', (e) => {
+        this._outputChannel.appendLine(`[QuemaTokens] Claude Code dir watcher error: ${e}`);
+      });
+      this.watchers.set(`claude-dir-${baseDir}`, watcher);
+    } catch (e) {
+      this._outputChannel.appendLine(`[QuemaTokens] Cannot watch Claude Code dir: ${e}`);
+    }
+  }
+
+  private tailClaudeCodeFile(filePath: string, key: string): void {
+    const startPos = this.tailPositions.get(key) ?? 0;
+
+    const fileStream = fs.createReadStream(filePath, {
+      start: startPos,
+      encoding: 'utf-8',
+    });
+
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+
+    let lastFilePos = startPos;
+
+    rl.on('line', (line) => {
+      try {
+        if (!line.trim()) return;
+        const entry = JSON.parse(line);
+
+        // Claude Code JSONL: look for assistant messages with usage
+        if (entry.type === 'assistant' && entry.usage) {
+          const usage = entry.usage;
+          const inputTokens = usage.input_tokens || 0;
+          const outputTokens = usage.output_tokens || 0;
+
+          // Skip streaming placeholders: only count entries where input_tokens > 1 OR output_tokens > 0
+          if (inputTokens <= 1 && outputTokens <= 0) {
+            lastFilePos += Buffer.byteLength(line + '\n', 'utf-8');
+            return;
+          }
+
+          const model = entry.model || 'claude';
+          const cacheReadTokens = usage.cache_read_input_tokens || 0;
+          const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+          // Include cache tokens in input total
+          const totalInput = inputTokens + cacheReadTokens + cacheCreationTokens;
+
+          const provider = this.findProviderById('claude-code') || identifyProvider(model) || this.fallbackProvider(model);
+          this.emit({
+            requestId: `claude-${path.basename(filePath)}-${lastFilePos}`,
+            provider,
+            model,
+            inputTokens: totalInput,
+            outputTokens,
+            timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+            source: 'session',
+          });
+        }
+
+        // Track position
+        lastFilePos += Buffer.byteLength(line + '\n', 'utf-8');
+      } catch {
+        // skip malformed lines
+      }
+    });
+
+    rl.on('close', () => {
+      this.tailPositions.set(key, lastFilePos);
+
+      // Watch for new lines
+      try {
+        const watchFile = fs.watch(filePath, { persistent: false }, () => {
+          try {
+            fs.stat(filePath, (err, stat) => {
+              if (err) return;
+              const currentPos = this.tailPositions.get(key) ?? lastFilePos;
+              if (stat.size >= currentPos) {
+                this.tailClaudeCodeFile(filePath, key);
+              }
+            });
+          } catch {
+            // ignore
+          }
+        });
+        watchFile.on('error', () => { /* ignore */ });
+        this.watchers.set(`claude-file-${key}`, watchFile);
+      } catch {
+        // ignore
+      }
+    });
+
+    rl.on('error', () => {
+      // ignore stream errors
+    });
+  }
+
+  // ── Codex CLI Session Watcher ──
+
+  private async watchCodexSessions(): Promise<void> {
+    const homeDir = os.homedir();
+    const codexHome = process.env.CODEX_HOME || path.join(homeDir, '.codex');
+    const sessionsDir = path.join(codexHome, 'sessions');
+
+    // Also check archived sessions
+    const archivedDir = path.join(codexHome, 'archived_sessions');
+
+    const dirsToWatch: string[] = [];
+
+    try {
+      const exists = await fs.promises.access(sessionsDir).then(() => true).catch(() => false);
+      if (exists) {
+        dirsToWatch.push(sessionsDir);
+      }
+    } catch { /* ignore */ }
+
+    try {
+      const exists = await fs.promises.access(archivedDir).then(() => true).catch(() => false);
+      if (exists) {
+        dirsToWatch.push(archivedDir);
+      }
+    } catch { /* ignore */ }
+
+    if (dirsToWatch.length === 0) {
+      this._outputChannel.appendLine(
+        `[QuemaTokens] Codex CLI sessions dir not found at: ${sessionsDir} or ${archivedDir}`
+      );
+      return;
+    }
+
+    this._outputChannel.appendLine(`[QuemaTokens] Watching Codex CLI sessions at: ${dirsToWatch.join(', ')}`);
+
+    for (const dir of dirsToWatch) {
+      try {
+        await this.scanCodexSessions(dir);
+        this.watchCodexDir(dir);
+      } catch (e) {
+        this._outputChannel.appendLine(`[QuemaTokens] Codex CLI watcher error for ${dir}: ${e}`);
+      }
+    }
+  }
+
+  private async scanCodexSessions(baseDir: string): Promise<void> {
+    try {
+      await this.scanCodexDirRecursive(baseDir);
+    } catch (e) {
+      this._outputChannel.appendLine(`[QuemaTokens] Error scanning Codex sessions: ${e}`);
+    }
+  }
+
+  private async scanCodexDirRecursive(dir: string): Promise<void> {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await this.scanCodexDirRecursive(fullPath);
+      } else if (entry.isFile() && entry.name.startsWith('rollout-') && entry.name.endsWith('.jsonl')) {
+        try {
+          const stat = await fs.promises.stat(fullPath);
+          const key = `codex-${fullPath}`;
+          if (!this.tailPositions.has(key)) {
+            this.tailPositions.set(key, stat.size); // start from end
+            this.tailCodexFile(fullPath, key);
+          }
+        } catch {
+          // skip
+        }
+      }
+    }
+  }
+
+  private watchCodexDir(baseDir: string): void {
+    try {
+      const watcher = fs.watch(baseDir, { persistent: false, recursive: true }, async (eventType, filename) => {
+        if (!filename) return;
+        try {
+          const fullPath = path.join(baseDir, filename);
+          const stat = await fs.promises.stat(fullPath);
+          if (stat.isFile() && filename.startsWith('rollout-') && filename.endsWith('.jsonl')) {
+            const key = `codex-${fullPath}`;
+            if (!this.tailPositions.has(key)) {
+              this.tailPositions.set(key, 0);
+              this.tailCodexFile(fullPath, key);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      });
+      watcher.on('error', (e) => {
+        this._outputChannel.appendLine(`[QuemaTokens] Codex dir watcher error: ${e}`);
+      });
+      this.watchers.set(`codex-dir-${baseDir}`, watcher);
+    } catch (e) {
+      this._outputChannel.appendLine(`[QuemaTokens] Cannot watch Codex dir: ${e}`);
+    }
+  }
+
+  private tailCodexFile(filePath: string, key: string): void {
+    const startPos = this.tailPositions.get(key) ?? 0;
+
+    const fileStream = fs.createReadStream(filePath, {
+      start: startPos,
+      encoding: 'utf-8',
+    });
+
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+
+    let lastFilePos = startPos;
+    let currentModel = '';
+
+    rl.on('line', (line) => {
+      try {
+        if (!line.trim()) return;
+        const entry = JSON.parse(line);
+
+        // Track model from turn_context
+        if (entry.turn_context?.model) {
+          currentModel = entry.turn_context.model;
+        }
+
+        // Look for token_count payload events
+        if (entry.payload?.type === 'token_count') {
+          const payload = entry.payload;
+          const inputTokens = payload.input_tokens || 0;
+          const outputTokens = payload.output_tokens || 0;
+          const cachedTokens = payload.cached_input_tokens || 0;
+          const reasoningTokens = payload.reasoning_tokens || 0;
+          const totalInput = inputTokens + cachedTokens;
+
+          if (inputTokens > 0 || outputTokens > 0) {
+            const model = currentModel || 'codex';
+            const provider = this.findProviderById('codex-cli') || identifyProvider(model) || this.fallbackProvider(model);
+            this.emit({
+              requestId: `codex-${path.basename(filePath)}-${lastFilePos}`,
+              provider,
+              model,
+              inputTokens: totalInput,
+              outputTokens: outputTokens + reasoningTokens,
+              timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+              source: 'session',
+            });
+          }
+        }
+
+        // Track position
+        lastFilePos += Buffer.byteLength(line + '\n', 'utf-8');
+      } catch {
+        // skip malformed lines
+      }
+    });
+
+    rl.on('close', () => {
+      this.tailPositions.set(key, lastFilePos);
+
+      // Watch for new lines
+      try {
+        const watchFile = fs.watch(filePath, { persistent: false }, () => {
+          try {
+            fs.stat(filePath, (err, stat) => {
+              if (err) return;
+              const currentPos = this.tailPositions.get(key) ?? lastFilePos;
+              if (stat.size >= currentPos) {
+                this.tailCodexFile(filePath, key);
+              }
+            });
+          } catch {
+            // ignore
+          }
+        });
+        watchFile.on('error', () => { /* ignore */ });
+        this.watchers.set(`codex-file-${key}`, watchFile);
+      } catch {
+        // ignore
+      }
+    });
+
+    rl.on('error', () => {
+      // ignore stream errors
+    });
+  }
+
+  // ── Utility ──
+
+  private findProviderById(id: string): ProviderDef | undefined {
+    // Import PROVIDERS lazily to avoid circular dependency issues
+    try {
+      const { PROVIDERS } = require('./providers');
+      return PROVIDERS.find(p => p.id === id);
+    } catch {
+      return undefined;
+    }
   }
 
   dispose(): void {
