@@ -210,9 +210,11 @@ function paint(){
 
 function save(){
   if(!vscode)return;
-  vscode.postMessage({command:'saveState',credits,record,betIndex:betIdx,totalSpins,totalTokensSpent:totalBet,jackpot,
+  try{
+  vscode.postMessage({command:'saveState',credits,record:rec,betIndex:betIdx,totalSpins,totalTokensSpent:totalBet,jackpot,
     gameStats:{wins,losses,biggestWin:bigWin,jackpotsWon,streak,bestStreak,totalBet,totalWon}});
   vscode.postMessage({command:'updateStatus',tokens:totalBet});
+  }catch(e){console.error('[QuemaTokens] save:',e)}
 }
 
 async function tirar(){

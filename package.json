@@ -2,7 +2,7 @@
   "name": "quematokens",
   "displayName": "QuemaTokens",
   "description": "Tragaperras clásica de palanca. ¡Juega y quema tokens! Los tokens de tu IA alimentan el bote progresivo.",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "publisher": "quematokens",
   "engines": {
     "vscode": "^1.85.0"
