@@ -104,7 +104,6 @@ export function activate(context: vscode.ExtensionContext) {
       resolveWebviewView(webviewView) {
         webviewView.webview.options = {
           enableScripts: true,
-          localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
         };
         webviewView.webview.html = getWebviewHtml(context.extensionUri, webviewView.webview);
         setupWebviewMessages(webviewView.webview, state);
@@ -121,7 +120,6 @@ export function activate(context: vscode.ExtensionContext) {
       const panel = vscode.window.createWebviewPanel('quematokens', '🎰 QuemaTokens', vscode.ViewColumn.Beside, {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')],
       });
       panel.webview.html = getWebviewHtml(context.extensionUri, panel.webview);
       setupWebviewMessages(panel.webview, state, panel);

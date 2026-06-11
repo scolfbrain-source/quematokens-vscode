@@ -1,17 +1,12 @@
 import * as vscode from 'vscode';
 
+import { imageData } from './imageData';
+
 export function getWebviewHtml(extensionUri: vscode.Uri, webview: vscode.Webview): string {
-  const mediaUri = (f: string) => webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', f));
-  const symbolImages: Record<string, string> = {
-    claude: mediaUri('claude.png'), codex: mediaUri('codex.png'), gemini: mediaUri('gemini.png'),
-    xai: mediaUri('xai.png'), deepseek: mediaUri('deepseek.png'), qwen: mediaUri('qwen.png'),
-    zai: mediaUri('zai.png'), minimax: mediaUri('minimax.png'), nvidia: mediaUri('nvidia.png'),
-    mistral: mediaUri('mistral.png'),
-  };
-  const imgMapJson = JSON.stringify(symbolImages);
+  const imgMapJson = JSON.stringify(imageData);
   return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src ${webview.cspSource}; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'unsafe-inline';">
 <style>${CSS}</style></head><body>
 <div class="maquina" id="maquina">
 <div class="marquesina"><div class="luces" id="luces"></div><h1>QUEMATOKENS</h1><div class="luces" id="luces2"></div></div>
@@ -209,6 +204,10 @@ function save(){
 
 async function tirar(){
   if(spinning)return;
+  spinning=true;
+  $('palanca').classList.add('bloqueada');
+  $('apuesta-menos').disabled=true;$('apuesta-mas').disabled=true;$('btn-spin').disabled=true;
+  try {
   const b=bet();
   if(credits<b){
     // Second chance!
@@ -221,15 +220,12 @@ async function tirar(){
     $('mensaje').className='mensaje';
     paint();
   }
-  spinning=true;
-  $('palanca').classList.add('bloqueada');
-  $('apuesta-menos').disabled=true;$('apuesta-mas').disabled=true;$('btn-spin').disabled=true;
   $('mensaje').classList.remove('gano','jackpot-msg');
   $('mensaje').textContent='Girando...';
   credits-=b;
   const jpCut=Math.floor(b*.1);
   jackpot+=jpCut;
-  totalBet+=b;totalSpins++;streak=0;
+  totalBet+=b;totalSpins++;
   paint();sLever();
   const res=doSpin();
   await Promise.all(res.map((d,i)=>spinReel(i,d,DUR[i])));
@@ -264,9 +260,14 @@ async function tirar(){
   }
   if(prize>0){credits+=prize;totalWon+=prize;wins++;streak++;if(streak>bestStreak)bestStreak=streak}else{losses++}
   paint();save();
+  } catch(e) {
+    console.error('Spin error:',e);
+    $('mensaje').textContent='Error! Intenta de nuevo';
+  } finally {
   spinning=false;
   $('palanca').classList.remove('bloqueada');
   $('apuesta-menos').disabled=false;$('apuesta-mas').disabled=false;$('btn-spin').disabled=false;
+  }
 }
 
 function spawnParticles(){
