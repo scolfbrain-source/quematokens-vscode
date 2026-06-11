@@ -258,11 +258,13 @@ async function tirar(){
       sLose();
     }
   }
-  if(prize>0){credits+=prize;totalWon+=prize;wins++;streak++;if(streak>bestStreak)bestStreak=streak}else{losses++}
-  paint();save();
+  if(prize>0){credits+=prize;totalWon+=prize;wins++;streak++;if(streak>bestStreak)bestStreak=streak}else{losses++;streak=0}
+  paint();
+  try{save()}catch(se){$('mensaje').textContent='(saved) '+$('mensaje').textContent}
   } catch(e) {
-    console.error('Spin error:',e);
-    $('mensaje').textContent='Error! Intenta de nuevo';
+    const em=e&&e.message?e.message:String(e);
+    const es=e&&e.stack?e.stack.split('\\n').slice(0,2).join(' '):'';
+    $('mensaje').textContent='Err:'+em;
   } finally {
   spinning=false;
   $('palanca').classList.remove('bloqueada');
