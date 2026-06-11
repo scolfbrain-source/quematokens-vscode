@@ -158,15 +158,15 @@ function payout(sym,bet=BASE){const m=bet/BASE;const[a,b,c]=sym;if(a===b&&b===c)
 
 // Sound
 let actx=null,muted=false;
-function ac(){if(!actx)actx=new AudioContext();if(actx.state==='suspended')actx.resume();return actx}
-function tone(f,d,t='square',v=.06,dl=0){if(muted)return;try{const c=ac(),o=c.createOscillator(),g=c.createGain(),t0=c.currentTime+dl;o.type=t;o.frequency.value=f;g.gain.setValueAtTime(v,t0);g.gain.exponentialRampToValueAtTime(.001,t0+d);o.connect(g).connect(c.destination);o.start(t0);o.stop(t0+d)}catch(e){}}
-function sLever(){tone(180,.08,'square',.08);tone(110,.12,'square',.08,.06)}
-function sStop(){tone(320,.06,'triangle',.09)}
-function sWin(n){const ns=n>=100?[523,659,784,1047,784,1047,1319]:[523,659,784,1047];ns.forEach((f,i)=>tone(f,.18,'triangle',.09,i*.12))}
-function sJackpot(){[523,659,784,1047,784,1047,1319,1568,1319,1568,2093].forEach((f,i)=>tone(f,.2,'triangle',.12,i*.1))}
-function sLose(){tone(150,.2,'sawtooth',.04)}
-function sRefill(){tone(440,.1,'sine',.06);tone(554,.1,'sine',.06,.1);tone(659,.1,'sine',.06,.2);tone(880,.15,'sine',.08,.3)}
-function sJpGrow(){tone(1200,.05,'sine',.04)}
+function ac(){try{if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx}catch(e){return null}}
+function tone(f,d,t='square',v=.06,dl=0){if(muted)return;try{const c=ac();if(!c)return;const o=c.createOscillator(),g=c.createGain(),t0=c.currentTime+dl;o.type=t;o.frequency.value=f;g.gain.setValueAtTime(v,t0);g.gain.exponentialRampToValueAtTime(.001,t0+d);o.connect(g).connect(c.destination);o.start(t0);o.stop(t0+d)}catch(e){}}
+function sLever(){try{tone(180,.08,'square',.08);tone(110,.12,'square',.08,.06)}catch(e){}}
+function sStop(){try{tone(320,.06,'triangle',.09)}catch(e){}}
+function sWin(n){try{const ns=n>=100?[523,659,784,1047,784,1047,1319]:[523,659,784,1047];ns.forEach((f,i)=>tone(f,.18,'triangle',.09,i*.12))}catch(e){}}
+function sJackpot(){try{[523,659,784,1047,784,1047,1319,1568,1319,1568,2093].forEach((f,i)=>tone(f,.2,'triangle',.12,i*.1))}catch(e){}}
+function sLose(){try{tone(150,.2,'sawtooth',.04)}catch(e){}}
+function sRefill(){try{tone(440,.1,'sine',.06);tone(554,.1,'sine',.06,.1);tone(659,.1,'sine',.06,.2);tone(880,.15,'sine',.08,.3)}catch(e){}}
+function sJpGrow(){try{tone(1200,.05,'sine',.04)}catch(e){}}
 
 // State
 const H=78,REP=7,TURNS=[2,3,4],DUR=[1100,1600,2100];

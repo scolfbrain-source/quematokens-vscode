@@ -141,46 +141,33 @@ export class TokenTracker {
   // ── Layer 3: Chat Heuristic ──
 
   private setupChatHeuristic(): void {
-    const config = vscode.workspace.getConfiguration('quematokens');
-
     vscode.workspace.onDidChangeTextDocument((e) => {
       const uri = e.document.uri.toString();
-      if (!uri.includes('vscode-chat') && !uri.includes('copilot') && !uri.includes('inline-chat')) {
-        return;
-      }
+      const scheme = e.document.uri.scheme;
 
-      // If we already have session data, don't double-count
-      if (this.sessionWatcher.sessionBasePath) {
-        return;
-      }
+      // Skip real files and git diffs — only track virtual/chat documents
+      if (scheme === 'file' || scheme === 'git' || scheme === 'private') return;
+      // Skip untitled docs that have a real file path (user just opened an unsaved file)
+      if (scheme === 'untitled' && e.document.uri.fsPath) return;
 
-      // Heuristic: estimate ~4 chars/token from the diff
-      const autoSpin = config.get<boolean>('autoSpin', true);
-      if (!autoSpin) return;
+      // Skip if no content changes
+      if (e.contentChanges.length === 0) return;
 
-      const text = e.document.getText();
-      if (!text || text.length < 10) return;
+      const addedText = e.contentChanges.map(c => c.text).join('');
+      if (addedText.length < 20) return;
 
-      // Only count text that appears to be assistant responses
-      // (longer chunks in chat are likely model outputs)
-      if (e.contentChanges.length > 0) {
-        const addedText = e.contentChanges
-          .map(c => c.text)
-          .join('');
-        if (addedText.length > 50) {
-          const estimatedTokens = Math.ceil(addedText.length / 4);
-          const provider = this.guessProviderFromUri(uri);
-          this.handleTokenEvent({
-            requestId: `heuristic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            provider,
-            model: 'estimated',
-            inputTokens: Math.ceil(addedText.length / 6),
-            outputTokens: estimatedTokens,
-            timestamp: Date.now(),
-            source: 'heuristic',
-          });
-        }
-      }
+      const estimatedTokens = Math.ceil(addedText.length / 4);
+      const provider = this.guessProviderFromUri(uri) || this.guessProviderFromContent(addedText);
+
+      this.handleTokenEvent({
+        requestId: `heuristic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        provider,
+        model: this.guessModel(addedText, uri),
+        inputTokens: Math.ceil(addedText.length / 6),
+        outputTokens: estimatedTokens,
+        timestamp: Date.now(),
+        source: 'heuristic',
+      });
     });
   }
 
@@ -192,15 +179,73 @@ export class TokenTracker {
     if (lower.includes('gemini') || lower.includes('google')) {
       return PROVIDERS.find(p => p.id === 'google')!;
     }
+    if (lower.includes('deepseek')) {
+      return PROVIDERS.find(p => p.id === 'deepseek')!;
+    }
+    if (lower.includes('mistral') || lower.includes('mixtral') || lower.includes('codestral')) {
+      return PROVIDERS.find(p => p.id === 'mistral')!;
+    }
+    if (lower.includes('grok') || lower.includes('xai')) {
+      return PROVIDERS.find(p => p.id === 'xai')!;
+    }
+    if (lower.includes('qwen')) {
+      return PROVIDERS.find(p => p.id === 'qwen')!;
+    }
+    if (lower.includes('glm') || lower.includes('chatglm') || lower.includes('z.ai')) {
+      return PROVIDERS.find(p => p.id === 'zhipu')!;
+    }
+    if (lower.includes('minimax') || lower.includes('abab')) {
+      return PROVIDERS.find(p => p.id === 'minimax')!;
+    }
+    if (lower.includes('nvidia') || lower.includes('nemotron')) {
+      return PROVIDERS.find(p => p.id === 'nvidia')!;
+    }
     // Default to OpenAI (Copilot default)
     return PROVIDERS.find(p => p.id === 'openai')!;
+  }
+
+  private guessProviderFromContent(text: string): ProviderDef {
+    const lower = text.toLowerCase();
+    if (lower.includes('claude') || lower.includes('anthropic')) return PROVIDERS.find(p => p.id === 'anthropic')!;
+    if (lower.includes('gemini') || lower.includes('google')) return PROVIDERS.find(p => p.id === 'google')!;
+    if (lower.includes('deepseek')) return PROVIDERS.find(p => p.id === 'deepseek')!;
+    if (lower.includes('mistral') || lower.includes('mixtral') || lower.includes('codestral')) return PROVIDERS.find(p => p.id === 'mistral')!;
+    if (lower.includes('grok') || lower.includes('xai')) return PROVIDERS.find(p => p.id === 'xai')!;
+    if (lower.includes('qwen')) return PROVIDERS.find(p => p.id === 'qwen')!;
+    if (lower.includes('glm') || lower.includes('chatglm') || lower.includes('z.ai')) return PROVIDERS.find(p => p.id === 'zhipu')!;
+    if (lower.includes('minimax') || lower.includes('abab')) return PROVIDERS.find(p => p.id === 'minimax')!;
+    if (lower.includes('nvidia') || lower.includes('nemotron')) return PROVIDERS.find(p => p.id === 'nvidia')!;
+    return PROVIDERS.find(p => p.id === 'openai')!;
+  }
+
+  private guessModel(text: string, uri: string): string {
+    // Try to extract model name from content or URI
+    const combined = (text + ' ' + uri).toLowerCase();
+    const patterns: RegExp[] = [
+      /(?:gpt-4o(?:-mini)?(?:-\d{4}-\d{2}-\d{2})?)/i,
+      /(?:claude[- ]?(?:sonnet|opus|haiku)[- ]?[\d.]*(?:-\d{4}-\d{2}-\d{2})?)/i,
+      /(?:gemini[- ]?[\d.]+(?:-\w+)?)/i,
+      /(?:deepseek[- ][\w.]+)/i,
+      /(?:o[134](?:-mini)?(?:-\d{4}-\d{2}-\d{2})?)/i,
+      /(?:mistral[- ][\w.]+)/i,
+      /(?:nemotron[- ][\w.]+)/i,
+    ];
+    for (const p of patterns) {
+      const m = combined.match(p);
+      if (m && m[0]) return m[0].trim();
+    }
+    // Fallback: guess from provider context in URI
+    if (uri.includes('claude')) return 'claude';
+    if (uri.includes('gemini')) return 'gemini';
+    if (uri.includes('gpt') || uri.includes('codex') || uri.includes('copilot')) return 'gpt-4o';
+    return 'estimated';
   }
 
   // ── State Persistence ──
 
   private async loadState(): Promise<void> {
     try {
-      const stored = await this.readGlobalState();
+      const stored = this.readGlobalState();
       if (stored) {
         this.dailyUsage.clear();
         for (const [key, day] of Object.entries(stored.dailyUsage || {})) {

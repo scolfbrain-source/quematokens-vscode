@@ -77,27 +77,47 @@ export class SessionWatcher {
     }
 
     const customPath = config.get<string>('copilotSessionPath', '');
+    const homeDir = os.homedir();
+
+    // Build a list of candidate paths to search
+    const candidatePaths: string[] = [];
+
     if (customPath) {
-      this._sessionBasePath = customPath;
+      candidatePaths.push(customPath);
     } else {
-      // Cross-platform: Linux/Mac = ~/.copilot/, Windows = %USERPROFILE%\.copilot\
-      const homeDir = os.homedir();
-      this._sessionBasePath = path.join(homeDir, '.copilot', 'session-state');
-    }
-
-    try {
-      const exists = await fs.promises.access(this._sessionBasePath).then(() => true).catch(() => false);
-      if (!exists) {
-        this._outputChannel.appendLine(`[QuemaTokens] Session path not found: ${this._sessionBasePath}`);
-        return;
+      // Original path
+      candidatePaths.push(path.join(homeDir, '.copilot', 'session-state'));
+      // VSCode globalStorage paths (Linux)
+      candidatePaths.push(path.join(homeDir, '.config', 'Code', 'User', 'globalStorage', 'github.copilot'));
+      candidatePaths.push(path.join(homeDir, '.config', 'Code - Insiders', 'User', 'globalStorage', 'github.copilot'));
+      // VSCode globalStorage paths (macOS)
+      candidatePaths.push(path.join(homeDir, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'github.copilot'));
+      // VSCode globalStorage paths (Windows)
+      const appData = process.env.APPDATA || '';
+      if (appData) {
+        candidatePaths.push(path.join(appData, 'Code', 'User', 'globalStorage', 'github.copilot'));
       }
-
-      await this.scanExistingSessions();
-      this.watchSessionDir();
-      this._outputChannel.appendLine(`[QuemaTokens] Watching Copilot sessions at: ${this._sessionBasePath}`);
-    } catch (e) {
-      this._outputChannel.appendLine(`[QuemaTokens] Error starting session watcher: ${e}`);
     }
+
+    // Try each candidate path
+    for (const candidate of candidatePaths) {
+      try {
+        const exists = await fs.promises.access(candidate).then(() => true).catch(() => false);
+        if (exists) {
+          this._sessionBasePath = candidate;
+          await this.scanExistingSessions();
+          this.watchSessionDir();
+          this._outputChannel.appendLine(`[QuemaTokens] Watching Copilot sessions at: ${this._sessionBasePath}`);
+          return;
+        }
+      } catch {
+        // try next
+      }
+    }
+
+    this._outputChannel.appendLine(
+      `[QuemaTokens] No Copilot session path found. Tried:\n  ${candidatePaths.join('\n  ')}`
+    );
   }
 
   private async scanExistingSessions(): Promise<void> {
