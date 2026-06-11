@@ -20,6 +20,7 @@ const DEFAULT_GAME_STATS = {
 
 let tokenTracker: TokenTracker | undefined;
 let outputChannel: vscode.OutputChannel;
+let sidebarWebview: vscode.Webview | undefined;
 
 function getState(state: vscode.Memento) {
   return {
@@ -51,8 +52,21 @@ function setupWebviewMessages(webview: vscode.Webview, state: vscode.Memento, pa
       case 'updateStatus':
         if (panel) { panel.title = `🎰 QuemaTokens — ${message.tokens} tokens`; }
         break;
+      case 'resetGame':
+        await state.update(STATE_KEYS.credits, 1000);
+        await state.update(STATE_KEYS.record, 0);
+        await state.update(STATE_KEYS.betIndex, 0);
+        await state.update(STATE_KEYS.totalSpins, 0);
+        await state.update(STATE_KEYS.totalTokensSpent, 0);
+        await state.update(STATE_KEYS.jackpot, 500);
+        await state.update(STATE_KEYS.gameStats, { ...DEFAULT_GAME_STATS });
+        sendInitState(webview, state);
+        break;
       case 'resetTokenStats':
-        if (tokenTracker) { tokenTracker.resetStats(); }
+        if (tokenTracker) {
+          tokenTracker.resetStats();
+          sendInitState(webview, state);
+        }
         break;
     }
   });
@@ -85,6 +99,12 @@ function setupTokenFeed(webview: vscode.Webview, state: vscode.Memento) {
   });
 }
 
+function broadcastToSidebar(message: any) {
+  if (sidebarWebview) {
+    sidebarWebview.postMessage(message);
+  }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   const state = context.globalState;
   outputChannel = vscode.window.createOutputChannel('QuemaTokens');
@@ -102,6 +122,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('quematokens-main', {
       resolveWebviewView(webviewView) {
+        sidebarWebview = webviewView.webview;
         webviewView.webview.options = {
           enableScripts: true,
         };
@@ -137,7 +158,22 @@ export function activate(context: vscode.ExtensionContext) {
       await state.update(STATE_KEYS.totalTokensSpent, 0);
       await state.update(STATE_KEYS.jackpot, 500);
       await state.update(STATE_KEYS.gameStats, { ...DEFAULT_GAME_STATS });
-      vscode.window.showInformationMessage('QuemaTokens: ¡reiniciado! 🎰');
+      broadcastToSidebar({ command: 'reset' });
+      vscode.window.showInformationMessage('QuemaTokens: ¡Juego reiniciado! 🎰');
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('quematokens.resetTokenStats', () => {
+      if (tokenTracker) {
+        tokenTracker.resetStats();
+        broadcastToSidebar({
+          command: 'updateTokenStats',
+          todayUsage: tokenTracker.getTodayUsage(),
+          allTimeTotal: tokenTracker.getAllTimeTotal(),
+        });
+        vscode.window.showInformationMessage('QuemaTokens: Contadores de tokens reseteados 🧹');
+      }
     })
   );
 

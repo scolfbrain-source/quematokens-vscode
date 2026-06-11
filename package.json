@@ -2,7 +2,7 @@
   "name": "quematokens",
   "displayName": "QuemaTokens",
   "description": "Tragaperras clásica de palanca. ¡Juega y quema tokens! Los tokens de tu IA alimentan el bote progresivo.",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "publisher": "quematokens",
   "engines": {
     "vscode": "^1.85.0"
@@ -32,7 +32,12 @@
       },
       {
         "command": "quematokens.reset",
-        "title": "QuemaTokens: Reiniciar",
+        "title": "QuemaTokens: Reiniciar juego",
+        "category": "QuemaTokens"
+      },
+      {
+        "command": "quematokens.resetTokenStats",
+        "title": "QuemaTokens: Resetear contadores de tokens",
         "category": "QuemaTokens"
       },
       {
